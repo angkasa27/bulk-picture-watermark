@@ -158,7 +158,7 @@ def process_images_csv():
 
         # Extract output folders
         folder_start, folder_end = FOLDER_COLUMN_RANGE
-        folder_cols = df.columns[folder_start:folder_end]
+        folder_cols = df.columns[folder_start:folder_end + 1]  # +1 to include the end column
         output_folders = [str(row[col]).strip() for col in folder_cols if pd.notna(row[col]) and str(row[col]).strip()]
 
         input_path = os.path.join(INPUT_DIR, image_name)
