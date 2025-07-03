@@ -3,6 +3,7 @@ import pandas as pd
 from PIL import Image, ImageDraw, ImageFont
 import piexif
 from datetime import datetime
+from random import randint
 
 # -----------------------------------
 # Configuration
@@ -16,6 +17,7 @@ OUTPUT_DIR = "output_static"
 WATERMARK_COLUMN_RANGE = (5, 8)  # e.g., columns 5 to 7 → STREET NAME, SPAN CGK, SPAN DMT
 
 FONT_PATH = "/System/Library/Fonts/Supplemental/Arial.ttf"  # Update for Windows/Linux if needed
+
 
 # -----------------------------------
 # Helper Functions
@@ -95,6 +97,14 @@ def add_watermark(image_path, output_path, watermark_lines, date_str, longlat_st
 # -----------------------------------
 
 def process_images_csv():
+    # Set custom start datetime
+    base_datetime = datetime.strptime("2025-07-01 08:00", "%Y-%m-%d %H:%M")
+    current_datetime = base_datetime
+
+    # Working hour bounds
+    WORK_START = 8  # 08:00
+    WORK_END = 16   # 16:00
+
     # Load CSV
     df = pd.read_csv(CSV_FILE)
     df = df.dropna(subset=["File Name", "LONGLAT"])  # Ensure required fields
@@ -115,21 +125,20 @@ def process_images_csv():
         new_filename = str(row["File Name"]).strip() + ".jpg"
         longlat = str(row["LONGLAT"]).strip()
 
-        # Handle missing or invalid datetime
-        datetime_raw = row.get("Date & Time", None)
-        if pd.isna(datetime_raw):
-            now = datetime.now()
-            exif_datetime = now.strftime("%Y:%m:%d %H:%M:%S")
-            display_datetime = now.strftime("%d %b %Y %H:%M:%S")
-        else:
-            try:
-                parsed_date = pd.to_datetime(datetime_raw)
-                exif_datetime = parsed_date.strftime("%Y:%m:%d %H:%M:%S")
-                display_datetime = parsed_date.strftime("%d %b %Y %H:%M:%S")
-            except Exception:
-                now = datetime.now()
-                exif_datetime = now.strftime("%Y:%m:%d %H:%M:%S")
-                display_datetime = now.strftime("%d %b %Y %H:%M:%S")
+        # ✅ Generate randomized datetime per row
+        # Increment by 8–18 minutes
+        increment_minutes = randint(8, 36)
+        increment_seconds = randint(0, 59)
+        current_datetime += pd.Timedelta(minutes=increment_minutes, seconds=increment_seconds)
+
+        # If time exceeds 16:00, move to next day and reset to ~08:00
+        if current_datetime.hour >= WORK_END:
+            current_datetime = (current_datetime + pd.Timedelta(days=1)).replace(
+                hour=WORK_START, minute=randint(0, 10), second=0, microsecond=0
+            )
+
+        exif_datetime = current_datetime.strftime("%Y:%m:%d %H:%M:%S")
+        display_datetime = current_datetime.strftime("%d %b %Y %H:%M:%S")
 
         # Get dynamic columns from range (e.g., 5 to 8)
         start, end = WATERMARK_COLUMN_RANGE
