@@ -9,25 +9,19 @@ from random import randint
 # Configuration
 # -----------------------------------
 
-CSV_FILE = "Inside view.csv"
+CSV_FILE = "Street view.csv"
 INPUT_DIR = "input"
 OUTPUT_DIR = "output_static"
 
-# Columns used for watermark text (zero-indexed)
-WATERMARK_COLUMN_RANGE = (5, 8)  # e.g., F to H → STREET NAME, SPAN CGK, SPAN DMT
-
-# Columns used for folder output (zero-indexed)
-FOLDER_COLUMN_RANGE = (2, 3)     # e.g., C to D → folder names
-
-# Font path
-FONT_PATH = "/System/Library/Fonts/Supplemental/Arial.ttf"  # Change for Windows/Linux
+WATERMARK_COLUMN_RANGE = (5, 8)  # e.g., columns F to H
+FOLDER_COLUMN_RANGE = (2, 4)     # e.g., columns C to D → output folders
+FONT_PATH = "/System/Library/Fonts/Supplemental/Arial.ttf"  # Update if needed
 
 # -----------------------------------
 # Helper Functions
 # -----------------------------------
 
 def to_deg(value, ref_positive, ref_negative):
-    """Convert decimal degrees to EXIF-compatible format."""
     ref = ref_positive if value >= 0 else ref_negative
     abs_val = abs(value)
     d = int(abs_val)
@@ -47,7 +41,6 @@ def draw_watermark(img, lines, font):
     total_height = line_height * len(lines)
     x_base = img.width - margin
     y = img.height - total_height - margin - 64
-
     for line in lines:
         text_width = draw.textbbox((0, 0), line, font=font)[2]
         draw_text_with_shadow(draw, (x_base - text_width, y), line, font)
@@ -65,7 +58,6 @@ def update_exif_metadata(exif_data, date_str, lat, lon):
     exif_data["0th"][piexif.ImageIFD.DateTime] = encoded_date
     exif_data["Exif"][piexif.ExifIFD.DateTimeOriginal] = encoded_date
     exif_data["Exif"][piexif.ExifIFD.DateTimeDigitized] = encoded_date
-
     lat_data, lat_ref = to_deg(lat, b'N', b'S')
     lon_data, lon_ref = to_deg(lon, b'E', b'W')
     exif_data["GPS"] = {
@@ -80,7 +72,6 @@ def add_watermark(input_path, new_filename, output_folders, watermark_lines, exi
         img = Image.open(input_path)
         exif_bytes = img.info.get("exif")
         exif_data = piexif.load(exif_bytes) if exif_bytes else {"0th": {}, "Exif": {}, "GPS": {}}
-
         lat, lon = parse_lat_lon(longlat_str)
         if lat is not None and lon is not None:
             update_exif_metadata(exif_data, exif_datetime, lat, lon)
@@ -100,44 +91,41 @@ def add_watermark(input_path, new_filename, output_folders, watermark_lines, exi
         print(f"❌ Error processing {input_path}: {e}")
 
 # -----------------------------------
-# Main Processing Logic
+# Main Logic
 # -----------------------------------
 
 def process_images_csv():
-    # Set custom start datetime
     base_datetime = datetime.strptime("2025-07-01 08:00", "%Y-%m-%d %H:%M")
     current_datetime = base_datetime
+    WORK_START = 8
+    WORK_END = 16
 
-    # Working hour bounds
-    WORK_START = 8  # 08:00
-    WORK_END = 16   # 16:00
-
-    # Load CSV
     df = pd.read_csv(CSV_FILE)
-    df = df.dropna(subset=["File Name", "LONGLAT"])  # Ensure required fields
+    df = df.dropna(subset=["File Name", "Nama Foto", "LONGLAT"])
 
-    # Get sorted image files
-    image_files = sorted([
-        f for f in os.listdir(INPUT_DIR)
-        if f.lower().endswith((".jpg", ".jpeg"))
-    ])
+    for _, row in df.iterrows():
+        nama_foto = str(int(float(row["Nama Foto"]))).strip()
+        input_path = None
 
-    if len(image_files) > len(df):
-        print(f"❌ Error: {len(image_files)} images but only {len(df)} rows in CSV.")
-        return
+        # Search for .jpg or .jpeg
+        for ext in [".jpg", ".jpeg"]:
+            candidate = os.path.join(INPUT_DIR,  nama_foto + ext)
+            if os.path.exists(candidate):
+                input_path = candidate
+                break
 
-    # Process each image-row pair
-    for idx, image_name in enumerate(image_files):
-        row = df.iloc[idx]
+        if not input_path:
+            print(f"⚠️ Skipping: '{nama_foto}' not found")
+            continue
+
         new_filename = str(row["File Name"]).strip() + ".jpg"
         longlat = str(row["LONGLAT"]).strip()
 
-        # Generate randomized timestamp
+        # Generate randomized datetime
         increment_minutes = randint(8, 36)
         increment_seconds = randint(0, 59)
         current_datetime += pd.Timedelta(minutes=increment_minutes, seconds=increment_seconds)
 
-        # If outside working hours, go to next day and reset time
         if current_datetime.hour >= WORK_END:
             current_datetime = (current_datetime + pd.Timedelta(days=1)).replace(
                 hour=WORK_START,
@@ -149,19 +137,16 @@ def process_images_csv():
         exif_datetime = current_datetime.strftime("%Y:%m:%d %H:%M:%S")
         display_datetime = current_datetime.strftime("%d %b %Y %H:%M:%S")
 
-        # Extract watermark content from columns
+        # Get watermark lines
         wm_start, wm_end = WATERMARK_COLUMN_RANGE
         col_range = df.columns[wm_start:wm_end]
         dynamic_lines = [str(row[col]).strip() for col in col_range if pd.notna(row[col])]
-
         watermark_lines = [display_datetime, longlat] + dynamic_lines
 
-        # Extract output folders
+        # Output folder names
         folder_start, folder_end = FOLDER_COLUMN_RANGE
-        folder_cols = df.columns[folder_start:folder_end + 1]  # +1 to include the end column
+        folder_cols = df.columns[folder_start:folder_end]
         output_folders = [str(row[col]).strip() for col in folder_cols if pd.notna(row[col]) and str(row[col]).strip()]
-
-        input_path = os.path.join(INPUT_DIR, image_name)
 
         add_watermark(
             input_path=input_path,
@@ -173,7 +158,7 @@ def process_images_csv():
         )
 
 # -----------------------------------
-# Run the script
+# Run Script
 # -----------------------------------
 
 if __name__ == "__main__":

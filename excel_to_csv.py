@@ -29,7 +29,7 @@ def excel_sheet_to_csv(excel_file_path: str, sheet_name: str, csv_output_path: s
 # Example usage:
 if __name__ == "__main__":
     excel_path = "Data ATP_Rev.xlsx"             # Input Excel file
-    sheet = "Inside view"                 # Sheet name to extract
-    csv_path = "Inside view.csv"   # Output CSV file name
+    sheet = "Street view"                 # Sheet name to extract
+    csv_path = "Street view.csv"   # Output CSV file name
 
     excel_sheet_to_csv(excel_path, sheet, csv_path)
